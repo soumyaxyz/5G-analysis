@@ -18,7 +18,6 @@ from torchvision import datasets, transforms, models
 from torch.autograd import Variable 
 from sklearn.decomposition import PCA
 import pdb, traceback
-from matplotlib import pyplot as plt, colors
 
 def append_to(var, value):
     if var == None:
@@ -415,31 +414,21 @@ class Experiment():
       for sample in tqdm (self.train_loader, leave=False):
         # pdb.set_trace()
         x = sample['data']
-        # y_d = sample['labels_d']
-        # y_a = sample['labels_a']
-
-        y_D = sample['labels_Dist']
-        y_A = sample['labels_Angle']
-        y_D = y_D.type(torch.FloatTensor)
-        y_A = y_A.type(torch.FloatTensor)
-        y_D = torch.reshape(y_D, (-1, 1))
-        y_A = torch.reshape(y_A, (-1, 1))
+        y_d = sample['labels_d']
+        y_a = sample['labels_a']
 
         y_d_hat, y_a_hat = model.forward(x) #forward pass
         optimizer.zero_grad() #caluclate the gradient, manually setting to 0
         # pdb.set_trace()
         # obtain the loss function
-        loss_a = criterion(y_a_hat, y_A)
-        loss_d = criterion(y_d_hat, y_D)
-        # loss_a = criterion(y_a_hat, y_a)
-        # loss_d = criterion(y_d_hat, y_d)
+        loss_a = criterion(y_a_hat, y_a)
+        loss_d = criterion(y_d_hat, y_d)
         loss = torch.add(loss_a, loss_d)
 
         loss.backward() #calculates the loss of the loss function     
         optimizer.step() #improve from loss, i.e backprop
-        sum_loss += loss.item()*y_D.shape[0]
-        total += y_D.shape[0]
-        # pdb.set_trace()
+        sum_loss += loss.item()*y_d.shape[0]
+        total += y_d.shape[0]
 
       val_loss, val_acc, val_rmse = self.validation_metrics(model)
       if min_val_loss> val_loss:
@@ -454,7 +443,7 @@ class Experiment():
       # print(f"{min_val_loss=}, {stagnant=}, {patience=}")
       # pbar.set_description("train loss %.3f, val loss %.3f, val acc %.3f, val rmse %.3f" % (sum_loss/total, val_loss, val_acc, val_rmse))
       pbar.set_postfix({'train loss %.3f': sum_loss/total, 'val loss %.3f' : val_loss})
-      with open('stats_multihead_reg_mrmr_1.csv', 'a') as file:
+      with open('stats_multihead_mrmr.csv', 'a') as file:
         file.write(" %.4f, %.4f, %.4f, %.4f\n" % (sum_loss/total, val_loss, val_acc, val_rmse))
 
 
@@ -475,33 +464,25 @@ class Experiment():
       y__d = sample['labels_dist']
       y__a = sample['labels_angle']
 
-      y_D = sample['labels_Dist']
-      y_A = sample['labels_Angle']
-      y_D = y_D.type(torch.FloatTensor)
-      y_A = y_A.type(torch.FloatTensor)
-      y_D = torch.reshape(y_D, (-1, 1))
-      y_A = torch.reshape(y_A, (-1, 1))
-
-
       y_d_hat, y_a_hat = model.forward(x) #forward pass
       # pdb.set_trace()
       # obtain the loss function
-      loss_a = criterion(y_a_hat, y_A)
-      loss_d = criterion(y_d_hat, y_D)
+      loss_a = criterion(y_a_hat, y_a)
+      loss_d = criterion(y_d_hat, y_d)
       loss = torch.add(loss_a, loss_d)
 
      
       
       # pdb.set_trace()
-      # pred_d = torch.max(y_d_hat, 1)[1]
-      # pred_a = torch.max(y_a_hat, 1)[1]
-      # correct += (pred_d == y__d).float().sum()
-      # correct += (pred_d == y__d).float().sum()
+      pred_d = torch.max(y_d_hat, 1)[1]
+      pred_a = torch.max(y_a_hat, 1)[1]
+      correct += (pred_d == y__d).float().sum()
+      correct += (pred_d == y__d).float().sum()
       total += 2*y_a.shape[0]
       sum_loss += loss.item()*y_a.shape[0]
-      sum_rmse += np.sqrt(mean_squared_error(y_d_hat.detach().numpy(), y_D))*y_d.shape[0]
-      sum_rmse += np.sqrt(mean_squared_error(y_a_hat.detach().numpy(), y_A))*y_a.shape[0]
-    return sum_loss/(total/2), sum_rmse/total, sum_rmse/total
+      sum_rmse += np.sqrt(mean_squared_error(pred_d, y__d))*y_d.shape[0]
+      sum_rmse += np.sqrt(mean_squared_error(pred_a, y__a))*y_a.shape[0]
+    return sum_loss/(total/2), correct/total, sum_rmse/total
 
   def train_Regression(self, model,  regression_d, regression_a, optimizer,  num_epochs=100, patience = 5):
     # parameters = filter(lambda p: p.requires_grad, model.parameters())
@@ -524,7 +505,7 @@ class Experiment():
         # pdb.set_trace()
         x = sample['data']
         y_d = sample['labels_dist']
-        y_a = sample['labels_angle']
+        y_a = sample['labels_dist']
         y_D = sample['labels_Dist']
         y_A = sample['labels_Angle']
         y_D = y_D.type(torch.FloatTensor)
@@ -610,13 +591,13 @@ class Experiment():
       Y_a = append_to(Y_a, y__a)
     return pred_A, pred_D, Y_a, Y_d
 
-  def save_model(self, model, optimizer, filename='saved_multihead_reg_model_MRMR_1.pkl'):
+  def save_model(self, model, optimizer, filename='saved_multihead_model_MRMR.pkl'):
     torch.save({
       'model_state_dict': model.state_dict(),
       'optimizer_state_dict': optimizer.state_dict(),}, 
       filename)
 
-  def load_model(self, model, optimizer, filename='saved_multihead_reg_model_MRMR_1.pkl'):
+  def load_model(self, model, optimizer, filename='saved_multihead_model_pca.pkl'):
     checkpoint = torch.load(filename)
     model.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -653,26 +634,24 @@ class Experiment():
       return
       
     input_size = self.dataset.train_data.shape[1]
-    # pdb.set_trace()
-    #self.num_classes
 
-    model = LSTMnetwork([1,1], input_size, hidden_size, num_lstm_layers) #our lstm class
+    model = LSTMnetwork(self.num_classes, input_size, hidden_size, num_lstm_layers) #our lstm class
     # regression_d = LinearRegression(self.num_classes[0],1) 
     # regression_a = LinearRegression(self.num_classes[1],1)
 
     model = model.float() 
-    # optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    # optimizer_2 = torch.optim.SGD(model.parameters(), lr=0.01)
     # pdb.set_trace()
-    # model, optimizer = self.load_model(model, optimizer)
+    model, optimizer = self.load_model(model, optimizer)
 
-    self.train_model(model, optimizer, num_epochs)
+    # self.train_model(model, optimizer, num_epochs)
     # regression_d, optimizer_2 = self.load_model(regression_d, optimizer_2, 'saved_regression_dist_model_pca.pkl')
     # regression_a, _           = self.load_model(regression_a, optimizer_2, 'saved_regression_angle_model_pca.pkl')
 
     # self.train_Regression(model,  regression_d, regression_a, optimizer_2, num_epochs= 100,patience =20)
 
-    self.save_model(model, optimizer)
+    # self.save_model(model, optimizer)
     # self.save_model(regression_d, optimizer_2, 'saved_regression_dist_model_pca.pkl')
     # self.save_model(regression_a, optimizer_2, 'saved_regression_angle_model_pca.pkl')
 
